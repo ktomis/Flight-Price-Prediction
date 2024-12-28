@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nhom 11</title>
+    <link rel="icon" type="image/x-icon" href="../static/images/7893979.png">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="/static/css/style.css">
+    <!-- <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}"> -->
+</head>
+<body>
+    <div id="container">
+        <div id="loading" class="loading-overlay" style="display: none;">
+            <div class="spinner"></div>
+            <p>Đang dự đoán giá vé...</p>
+        </div>
+        
+        <!-- Form Input -->
+        <form action="/predict" method="post" class="container-form" onsubmit="return validateForm()">
+            <input class="megges-error" type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            
+            <h1>Dự Đoán Giá Vé Máy Bay</h1>
+            <div id="error-message" class="error-message" style="display: none;"></div>
+            
+            <div class="form-group date-section">
+                <div class="input-group">
+                    <label for="dep_date">Ngày Khởi Hành</label>
+                    <input type="datetime-local" id="dep_date" name="dep_date" 
+                           required min="<?php echo date('Y-m-d\TH:i'); ?>"
+                           onchange="calculateDuration()">
+                </div>
+                
+                <div class="input-group">
+                    <label for="arr_date">Ngày Đến</label>
+                    <input type="datetime-local" id="arr_date" name="arr_date" 
+                           required onchange="calculateDuration()">
+                </div>
+            </div>
+
+            <div class="form-group location-section">
+                <div class="input-group">
+                    <label for="source">Nơi Đi</label>
+                    <select id="source" name="source" required onchange="validateLocations()">
+                        <option value="">Chọn điểm đi</option>
+                        <option value="Delhi">Delhi</option>
+                        <option value="Mumbai">Mumbai</option>
+                        <option value="Chennai">Chennai</option>
+                        <option value="Kolkata">Kolkata</option>
+                        <option value="Banglore">Banglore</option>
+                    </select>
+                </div>
+
+                <div class="input-group">
+                    <label for="destination">Nơi Đến</label>
+                    <select id="destination" name="destination" required onchange="validateLocations()">
+                        <option value="">Chọn điểm đến</option>
+                        <option value="Cochin">Cochin</option>
+                        <option value="Delhi">Delhi</option>
+                        <option value="Hyderabad">Hyderabad</option>
+                        <option value="New Delhi">New Delhi</option>
+                        <option value="Banglore">Banglore</option>
+                        <option value="Kolkata">Kolkata</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-group flight-details-section">
+                <div class="input-group">
+                    <label for="stopage">Số Lượng Dừng</label>
+                    <select id="stopage" name="stopage" required>
+                        <option value="0">Bay Thẳng</option>
+                        <option value="1">1 Lần Dừng</option>
+                        <option value="2">2 Lần Dừng</option>
+                        <option value="3">3 Lần Dừng</option>
+                    </select>
+                </div>
+
+                <div class="input-group">
+                    <label for="airline">Hãng Hàng Không</label>
+                    <select id="airline" name="airline" required>
+                        <option value="">Chọn hãng bay</option>
+                        <option value="IndiGo">IndiGo</option>
+                        <option value="Air_India">Air India</option>
+                        <option value="Jet_Airways">Jet Airways</option>
+                        <option value="SpiceJet">SpiceJet</option>
+                        <option value="Multiple_carriers">Multiple carriers</option>
+                        <option value="GoAir">GoAir</option>
+                        <option value="Vistara">Vistara</option>
+                        <option value="Trujet">Trujet</option>
+                    </select>
+                </div>
+
+                <div class="input-group">
+                    <label for="flight_class">Hạng Ghế</label>
+                    <select id="flight_class" name="flight_class" required>
+                        <option value="economy">Phổ Thông</option>
+                        <option value="premium_economy">Phổ Thông Đặc Biệt</option>
+                        <option value="business">Thương Gia</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-group duration-section">
+                <div class="input-group">
+                    <label>Thời Gian Bay</label>
+                    <span id="duration_display">Chưa xác định</span>
+                </div>
+                <input type="hidden" id="duration_hours" name="duration_hours">
+                <input type="hidden" id="duration_minutes" name="duration_minutes">
+            </div>
+
+            <div class="form-group submit-section">
+                <button type="submit" id="predict-button">Dự Đoán Giá</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Form Output -->
+    <div class="prediction-price {% if success %}success{% endif %}">
+        {% if prediction_text %}
+        <div class="prediction-section">
+            <div class="prediction-blur">
+                <div class="form-icon">
+                    <i class="icon fas fa-times"></i>
+                </div>
+                <div class="flight-info">
+                    <h2>Thông Tin Chuyến Bay</h2>
+                    <div class="info-group">
+                        <div class="info-item">
+                            <i class="fas fa-plane-departure"></i>
+                            <span><strong>Điểm Đi:</strong> {{ source }}</span>
+                        </div>
+                        <div class="info-item">
+                            <i class="fas fa-plane-arrival"></i>
+                            <span><strong>Điểm Đến:</strong> {{ destination }}</span>
+                        </div>
+                        <div class="info-item">
+                            <i class="fas fa-calendar-alt"></i>
+                            <span><strong>Khởi Hành:</strong>
+                                <span class="datetime">{{ dep_date | replace("T", " → ") }}</span>
+                            </span>
+                        </div>
+                        <div class="info-item">
+                            <i class="fas fa-calendar-check"></i>
+                            <span><strong>Đến Nơi:</strong>
+                                <span class="datetime">{{ arr_date | replace("T", " → ") }}</span>
+                            </span>
+                        </div>
+                        <div class="info-item">
+                            <i class="fas fa-plane"></i>
+                            <span><strong>Hãng Bay:</strong> {{ airline }}</span>
+                        </div>
+                        <div class="info-item">
+                            <i class="fas fa-map-marker-alt"></i>
+                            <span><strong>Điểm Dừng:</strong> {{ stopage }}</span>
+                        </div>
+                        <div class="info-item">
+                            <i class="fas fa-chair"></i>
+                            <span><strong>Hạng Ghế:</strong> {{ flight_class }}</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="prediction-result">
+                    <h3>{{ prediction_text }}</h3>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <script src="/static/js/script.js"></script>
+</body>
+</html>

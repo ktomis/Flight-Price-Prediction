@@ -1,0 +1,11 @@
+myenv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+.env
+*.sqlite3
+*.log
+*.ipynb_checkpoints
+node_modules/
