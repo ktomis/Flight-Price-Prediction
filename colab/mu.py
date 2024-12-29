@@ -54,15 +54,17 @@ data['Total_Duration_Minutes'] = data['Duration_Hours'] * 60 + data['Duration_Mi
 data.drop(['Duration'], axis=1, inplace=True)
 data.head()
 
+# Drop 2 bảng
 data.drop(['Route', 'Additional_Info'], axis=1, inplace=True)
 
-data['Total_Stops'] = data['Total_Stops'].replace({
+stop_mapping = {
     'non-stop': 0,
     '1 stop': 1,
     '2 stops': 2,
     '3 stops': 3,
     '4 stops': 4
-}).astype(int)
+}
+data['Total_Stops'] = data['Total_Stops'].map(stop_mapping).astype(int)
 data.head()
 
 # Mã hóa cột Airline
@@ -126,6 +128,13 @@ X.head()
 y.head()
 
 print(data.dtypes)
+
+# Lưu dữ liệu đã mã hóa vào file CSV
+X.to_csv('encoded_data.csv', index=False)
+
+# Tải xuống file từ Colab
+from google.colab import files
+files.download('encoded_data.csv')
 
 plt.figure(figsize=(20, 20))
 sns.heatmap(data.corr(), annot=True, cmap="RdYlGn")
@@ -216,10 +225,25 @@ print("R² Score:", r2)
 
 """# **Huấn Luyện Mô Hình XGBoost Regressor**"""
 
+!pip uninstall xgboost -y
+
+!pip install xgboost --upgrade
+
+!pip install scikit-learn==1.5.0
+
+import xgboost
+import sklearn
+print("XGBoost version:", xgboost.__version__)
+print("Scikit-learn version:", sklearn.__version__)
+
 from xgboost import XGBRegressor
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 import numpy as np
-xgb_model = XGBRegressor()
+#xgb_model = XGBRegressor()
+#xgb_model.fit(X_train, y_train)
+
+# Chạy Cho CPU nếu không gặp lỗi "cuInit" not found
+xgb_model = XGBRegressor(tree_method='hist')
 xgb_model.fit(X_train, y_train)
 
 # Dự đoán và đánh giá mô hình
@@ -297,12 +321,33 @@ for i, v in enumerate(R2):
 plt.tight_layout()
 plt.show()
 
+"""# **Biểu Đồ So Sánh Giá Của Các Mô Hình**"""
+
+plt.figure(figsize=(12, 6))
+plt.plot(y_test.values, label='Giá vé thực tế', color='blue')
+plt.plot(lr_pred, label='Linear Regression', linestyle='dashed')
+plt.plot(pred, label='Random Forest', linestyle='dashed')
+plt.plot(xgb_pred, label='XGBoost', linestyle='dashed')
+
+plt.title('So sánh giá vé thực tế và dự đoán giữa các mô hình')
+plt.xlabel('Mẫu dữ liệu')
+plt.ylabel('Giá vé (INR)')
+plt.legend()
+plt.show()
+
 """# **Mô Hình Hoàn Thiện**"""
 
 import joblib
 
 # Lưu mô hình XGBoost
 joblib.dump(xgb_model, "xgboost_model.pkl")
+
+from google.colab import files
+files.download("xgboost_model.pkl")
+
+# In ra danh sách đặc trưng của dữ liệu huấn luyện
+print("Danh sách đặc trưng của mô hình:")
+print(X.columns)
 
 """*Flask API *"""
 
