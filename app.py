@@ -15,7 +15,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = '36588c0cba9f154d334386b1cf0ab41c7dbdc367c34b4b711a246656c0d93065'
+app.config['SECRET_KEY'] = 'YOUR_KEY' # Chạy createKey.py để tạo key nếu cần, không cần key nếu chạy local (chỉ để demo)
 csrf = CSRFProtect(app)
 
 # Khởi tạo model global
