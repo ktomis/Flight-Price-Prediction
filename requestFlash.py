@@ -1,20 +1,38 @@
 import joblib
 import numpy as np
 import pandas as pd
-import random
-from datetime import datetime, timedelta
+import time
 
 # Load model
 model = joblib.load('colab/xgboost_model.pkl')
 
-# Danh sách các thông tin mô phỏng
-airlines = ['Air_India', 'GoAir', 'IndiGo', 'Jet_Airways', 'Multiple_carriers', 'SpiceJet', 'Vistara', 'Trujet']
-sources = ['Delhi', 'Mumbai', 'Kolkata', 'Chennai']
-destinations = ['Cochin', 'Hyderabad', 'New Delhi', 'Delhi']
-flight_classes = ['economy', 'premium_economy', 'business']
-stopages = ['0', '1', '2', '3']
+# Load dữ liệu từ file CSV
+file_path = 'data/processed/cleaned_test_data.csv'
+data = pd.read_csv(file_path)
 
-# Các cột feature mà model yêu cầu
+# Chuyển đổi ngày tháng và thời gian từ CSV (fix UserWarning)
+data['Date_of_Journey'] = pd.to_datetime(data['Date_of_Journey'], format='%d/%m/%Y')
+data['Journey_Day'] = data['Date_of_Journey'].dt.day
+data['Journey_Month'] = data['Date_of_Journey'].dt.month
+
+# Xử lý thời gian (chỉ lấy giờ phút, bỏ phần ngày)
+data['Dep_Time'] = pd.to_datetime(data['Dep_Time'].str.split().str[0], format='%H:%M')
+data['Dep_Hour'] = data['Dep_Time'].dt.hour
+data['Dep_Minute'] = data['Dep_Time'].dt.minute
+
+data['Arrival_Time'] = pd.to_datetime(data['Arrival_Time'].str.split().str[0], format='%H:%M')
+data['Arrival_Hour'] = data['Arrival_Time'].dt.hour
+data['Arrival_Minute'] = data['Arrival_Time'].dt.minute
+
+# Xử lý Total_Stops (convert text to number)
+def convert_stops(stops):
+    if 'non-stop' in stops.lower():
+        return 0
+    return int(stops.split()[0])  # Lấy số từ chuỗi (ví dụ: '1 stop' -> 1)
+
+data['Total_Stops'] = data['Total_Stops'].apply(convert_stops)
+
+# Các cột cần thiết cho model
 feature_columns = [
     'Total_Stops', 'Journey_Day', 'Journey_Month', 'Dep_Hour', 'Dep_Minute',
     'Arrival_Hour', 'Arrival_Minute', 'Duration_Hours', 'Duration_Minutes',
@@ -25,91 +43,105 @@ feature_columns = [
     'Cochin', 'Delhi', 'Hyderabad', 'Kolkata', 'New Delhi'
 ]
 
-# Hàm tạo dữ liệu mô phỏng
-def generate_random_data():
-    departure_date = datetime.now() + timedelta(days=random.randint(1, 30))
-    arrival_date = departure_date + timedelta(hours=random.randint(1, 12))
+# Hàm xử lý dữ liệu trước khi dự đoán (fix lỗi Duration)
+def preprocess_csv_input(df):
+    processed_data = []
+    rows = []
+
+    for _, row in df.iterrows():
+        try:
+            # Xử lý Duration (giờ và phút)
+            duration = row['Duration']
+            if 'h' in duration and 'm' in duration:
+                hours = int(duration.split('h')[0])
+                minutes = int(duration.split('h')[1].split('m')[0])
+            elif 'h' in duration:
+                hours = int(duration.split('h')[0])
+                minutes = 0
+            elif 'm' in duration:
+                hours = 0
+                minutes = int(duration.split('m')[0])
+            else:
+                hours = 0
+                minutes = 0  # Trường hợp không có thông tin, mặc định là 0
+
+            features = {
+                'Total_Stops': row['Total_Stops'],
+                'Journey_Day': row['Journey_Day'],
+                'Journey_Month': row['Journey_Month'],
+                'Dep_Hour': row['Dep_Hour'],
+                'Dep_Minute': row['Dep_Minute'],
+                'Arrival_Hour': row['Arrival_Hour'],
+                'Arrival_Minute': row['Arrival_Minute'],
+                'Duration_Hours': hours,
+                'Duration_Minutes': minutes,
+                'Total_Duration_Minutes': hours * 60 + minutes
+            }
+            
+            # One-hot encode airline, source, destination
+            for col in feature_columns:
+                if col not in features:
+                    features[col] = 0
+
+            if row['Airline'] in feature_columns:
+                features[row['Airline']] = 1
+            if row['Source'] in feature_columns:
+                features[row['Source']] = 1
+            if row['Destination'] in feature_columns:
+                features[row['Destination']] = 1
+            
+            input_array = [features.get(column, 0) for column in feature_columns]
+            processed_data.append(input_array)
+            rows.append(row)
+
+        except Exception as e:
+            print(f"Lỗi ở dòng {_ + 1}: {str(e)} - Ghi log lỗi.")
+            rows.append(row)  # Thêm dòng bị lỗi để vẫn dự đoán
+            processed_data.append([0] * len(feature_columns))  # Thêm giá trị 0 cho dòng lỗi
     
-    data = {
-        'dep_date': departure_date,
-        'arr_date': arrival_date,
-        'source': random.choice(sources),
-        'destination': random.choice(destinations),
-        'airline': random.choice(airlines),
-        'stopage': random.randint(0, 3),
-        'duration_hours': random.randint(1, 12),
-        'duration_minutes': random.randint(0, 59),
-        'flight_class': random.choice(flight_classes)
-    }
-    return data
+    return np.array(processed_data).astype('float32'), rows
 
-# Hàm tiền xử lý dữ liệu đầu vào
-def preprocess_input(data):
-    dep_date = data['dep_date']
-    arr_date = data['arr_date']
+# Tiền xử lý dữ liệu
+input_data, raw_rows = preprocess_csv_input(data)
 
-    features = {
-        'Journey_Day': dep_date.day,
-        'Journey_Month': dep_date.month,
-        'Dep_Hour': dep_date.hour,
-        'Dep_Minute': dep_date.minute,
-        'Arrival_Hour': arr_date.hour,
-        'Arrival_Minute': arr_date.minute,
-        'Total_Stops': data['stopage'],
-        'Duration_Hours': data['duration_hours'],
-        'Duration_Minutes': data['duration_minutes'],
-        'Total_Duration_Minutes': (data['duration_hours'] * 60 + data['duration_minutes'])
-    }
+# Dự đoán giá vé
+predictions = model.predict(input_data)
 
-    # Encode airline
-    for airline in airlines:
-        features[airline] = 1 if data['airline'] == airline else 0
+# In và lưu kết quả
+results = []
+for i, row in enumerate(raw_rows):
+    predicted_price = predictions[i]
+    
+    # Điều chỉnh giá theo hạng ghế
+    if 'premium' in row['Additional_Info'].lower():
+        predicted_price *= 1.3
+    elif 'business' in row['Additional_Info'].lower():
+        predicted_price *= 1.5
 
-    # Encode source
-    for source in sources:
-        features[source] = 1 if data['source'] == source else 0
+    formatted_price = "{:,.2f}".format(predicted_price)
+    
+    # Lưu vào list kết quả
+    results.append({
+        'Source': row['Source'],
+        'Destination': row['Destination'],
+        'Airline': row['Airline'],
+        'Predicted_Price': formatted_price,
+        'Departure_Date': row['Date_of_Journey'].strftime('%Y-%m-%d'),
+        'Arrival_Time': row['Arrival_Time'].strftime('%H:%M'),
+        'Total_Stops': row['Total_Stops'],
+        'Duration': row['Duration'],
+        'Class': row['Additional_Info']
+    })
 
-    # Encode destination
-    for dest in destinations:
-        features[dest] = 1 if data['destination'] == dest else 0
+    # In từng dòng với hiệu ứng delay
+    print(f"{row['Source']:>8} -> {row['Destination']:<12} | "
+          f"{row['Airline']:<20} | Giá: {formatted_price} | "
+          f"Ngày: {row['Date_of_Journey'].strftime('%Y-%m-%d')} | "
+          f"Dừng: {row['Total_Stops']} | Thời gian bay: {row['Duration']}")
+    
+    time.sleep(0.01)  # Delay 10ms giữa các dòng
 
-    # Chuẩn hóa đầu vào để khớp với các cột của model
-    input_array = [features.get(column, 0) for column in feature_columns]
-
-    return np.array([input_array]).astype('float32')
-
-# Hàm chạy nhiều dự đoán
-def run_predictions(n=10):
-    for i in range(n):
-        data = generate_random_data()
-        if data['source'] == data['destination']:
-            continue  # Bỏ qua nếu source và destination trùng nhau
-        
-        # Tiền xử lý
-        input_data = preprocess_input(data)
-        
-        # Dự đoán
-        prediction = model.predict(input_data)
-        
-        # Điều chỉnh giá theo hạng ghế
-        if data['flight_class'] == 'premium_economy':
-            prediction *= 1.3
-        elif data['flight_class'] == 'business':
-            prediction *= 1.5
-        
-        formatted_price = "{:,.2f}".format(prediction[0])
-        
-        # Hiển thị dữ liệu đầu vào và giá dự đoán
-        print(f"[{i+1}] Dự đoán giá vé: {formatted_price}₹ INR")
-        print(f"  - Ngày đi: {data['dep_date'].strftime('%Y-%m-%d %H:%M')}")
-        print(f"  - Ngày đến: {data['arr_date'].strftime('%Y-%m-%d %H:%M')}")
-        print(f"  - Điểm đi: {data['source']}")
-        print(f"  - Điểm đến: {data['destination']}")
-        print(f"  - Hãng bay: {data['airline']}")
-        print(f"  - Điểm dừng: {data['stopage']}")
-        print(f"  - Thời lượng bay: {data['duration_hours']} giờ {data['duration_minutes']} phút")
-        print(f"  - Hạng ghế: {data['flight_class'].replace('_', ' ').capitalize()}")
-        print("---------------------------------------------------")
-
-# Chạy 20 dự đoán
-run_predictions(20)
+# Lưu vào file CSV
+results_df = pd.DataFrame(results)
+results_df.to_csv('data/results/predicted_results.csv', index=False)
+print("\nKết quả dự đoán từ tệp test đã được lưu vào 'predicted_results.csv'")
