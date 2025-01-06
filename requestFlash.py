@@ -142,6 +142,6 @@ for i, row in enumerate(raw_rows):
     time.sleep(0.01)  # Delay 10ms giữa các dòng
 
 # Lưu vào file CSV
-results_df = pd.DataFrame(results)
-results_df.to_csv('data/results/predicted_results.csv', index=False)
-print("\nKết quả dự đoán từ tệp test đã được lưu vào 'predicted_results.csv'")
+# results_df = pd.DataFrame(results)
+# results_df.to_csv('data/results/predicted_results.csv', index=False)
+# print("\nKết quả dự đoán từ tệp test đã được lưu vào 'predicted_results.csv'")
