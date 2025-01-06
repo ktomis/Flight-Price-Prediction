@@ -85,4 +85,4 @@ AirfarePrediction_MC/
 Hãy thoải mái fork dự án và gửi pull request cho bất kỳ cải tiến hoặc sửa lỗi nào.
 
 ## Liên Hệ
-Mọi thắc mắc xin liên hệ qua Nhóm 11 hoặc các thành viên của nhóm [..............].
+Mọi thắc mắc xin liên hệ qua Nhóm 10 hoặc các thành viên của nhóm [Mis - Duy - Chính - Toàn].
